@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Review Tutor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600&family=Google+Sans+Text:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <!-- Terapkan tema sedini mungkin agar tidak ada kedipan warna saat load -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('crt_theme_v1') || 'light';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+</head>
+
+<body>
+
+  <!-- ─── Header ─── -->
+  <header>
+    <button class="h-btn h-menu" type="button" title="Buka/tutup sidebar" onclick="toggleSidebar()" aria-label="Buka/tutup sidebar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <line x1="3" y1="12" x2="21" y2="12" />
+        <line x1="3" y1="18" x2="21" y2="18" />
+      </svg>
+    </button>
+
+    <a class="logo" href="#">
+      <div class="logo-gem" aria-hidden="true">
+        <svg viewBox="0 0 20 20">
+          <polygon points="10,2 18,7 18,13 10,18 2,13 2,7" />
+        </svg>
+      </div>
+      <span class="logo-name">Code Review Tutor</span>
+      <span class="logo-sub">AI · Kecerdasan Buatan</span>
+    </a>
+
+    <button class="h-btn" type="button" id="themeToggle" title="Ganti tema" onclick="toggleTheme()" aria-label="Ganti tema gelap/terang">
+      <!-- Ikon matahari (mode terang) -->
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="5" />
+        <path
+          d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+      </svg>
+      <!-- Ikon bulan (mode gelap) -->
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+      </svg>
+    </button>
+    <div class="h-avatar" title="Rezky Arya Palanni" aria-label="Profil pengguna">R</div>
+  </header>
+
+  <!-- Lapisan gelap saat sidebar dibuka di layar sempit -->
+  <div class="sidebar-scrim" id="sidebarScrim" onclick="closeSidebar()" aria-hidden="true"></div>
+
+  <!-- ─── Sidebar ─── -->
+  <aside aria-label="Navigasi">
+    <nav class="sb-nav">
+      <div class="sb-row active" id="navNew" onclick="newAnalysisSession()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+        Analisis baru
+      </div>
+      <div class="sb-row" onclick="openSampleModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        Contoh kode
+      </div>
+      <div class="sb-row" id="navRules" onclick="openRulesModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+        </svg>
+        Rules KB
+        <span class="badge">15</span>
+      </div>
+    </nav>
+
+    <div class="sb-section">Riwayat</div>
+    <div class="sb-history" id="histList" role="list">
+      <div class="hist-empty">Belum ada riwayat analisis.</div>
+    </div>
+
+    <div class="sb-footer">
+      <div class="sb-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+        </svg>
+        Rezky Arya Palanni
+        <span class="badge" style="background:var(--blue-soft);color:var(--blue);">IK24</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ─── Main ─── -->
+  <main>
+
+    <!-- Welcome screen -->
+    <div class="welcome" id="welcomeScreen" aria-label="Layar selamat datang">
+      <h1 class="welcome-heading">Hai sekarang berikan codenya, <br><span>Gooners</span></h1>
+
+      <div class="input-pill-wrap">
+        <div class="input-pill">
+          <textarea class="editor-textarea" id="mainEditor"
+            placeholder="Paste kode Python kamu di sini untuk dianalisis..." spellcheck="false" autocomplete="off"
+            aria-label="Editor kode Python"></textarea>
+          <div class="pill-footer">
+            <button class="pill-action" onclick="openSampleModal()" aria-label="Muat contoh kode">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              Contoh kode
+            </button>
+            <button class="pill-action" onclick="clearEditor()" aria-label="Bersihkan editor">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6" />
+              </svg>
+              Hapus
+            </button>
+            <button class="pill-send" id="mainSendBtn" onclick="startAnalysis()" title="Analisis (Ctrl+Enter)"
+              aria-label="Analisis kode">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round" aria-hidden="true">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="suggestions" role="list" aria-label="Saran contoh kode">
+        <button class="sugg-chip" onclick="loadSample('basic')" role="listitem">bare_except + deep_nesting</button>
+        <button class="sugg-chip" onclick="loadSample('magic')" role="listitem">magic_number</button>
+        <button class="sugg-chip" onclick="loadSample('deep')" role="listitem">global_variable</button>
+        <button class="sugg-chip" onclick="loadSample('all')" role="listitem">Semua antipattern</button>
+      </div>
+    </div>
+
+    <!-- Analysis view -->
+    <div class="analysis-view" id="analysisView">
+
+      <!-- Chat scroll area -->
+      <div class="chat-scroll" id="chatScroll">
+        <div class="chat-wrap" id="chatWrap"></div>
+      </div>
+
+      <!-- Bottom re-input -->
+      <div class="bottom-bar" id="bottomBar">
+        <div class="mini-pill">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink3);flex-shrink:0;" aria-hidden="true">
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+          <textarea class="mini-input" id="miniInput" rows="1"
+            placeholder="Paste kode Python lain untuk dianalisis... (Ctrl+Enter untuk kirim)"
+            aria-label="Input kode baru" spellcheck="false"></textarea>
+          <button class="mini-send" onclick="continueAnalysis()" aria-label="Kirim">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+              stroke-linejoin="round" aria-hidden="true">
+              <line x1="22" y1="2" x2="11" y2="13" />
+              <polygon points="22 2 15 22 11 13 2 9 22 2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /analysis-view -->
+
+  </main>
+
+  <!-- ─── Modal Pilih Sample File ─── -->
+  <div class="modal-overlay" id="sampleModal" onclick="closeSampleModal(event)" role="dialog" aria-modal="true" aria-label="Pilih file sample">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">Pilih File Sample</span>
+        <button class="modal-close" onclick="document.getElementById('sampleModal').classList.remove('show')" aria-label="Tutup">✕</button>
+      </div>
+      <div class="modal-list" id="sampleFileList">
+        <div class="modal-loading">Memuat daftar file...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Modal Rules KB ─── -->
+  <div class="modal-overlay" id="rulesModal" onclick="closeRulesModal(event)" role="dialog" aria-modal="true" aria-label="Daftar rules">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">Knowledge Base — 15 Rules Antipattern</span>
+        <button type="button" class="modal-close" onclick="document.getElementById('rulesModal').classList.remove('show')" aria-label="Tutup">✕</button>
+      </div>
+      <div class="modal-list" id="rulesList">
+        <div class="modal-loading">Memuat daftar rules...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+
+</html>

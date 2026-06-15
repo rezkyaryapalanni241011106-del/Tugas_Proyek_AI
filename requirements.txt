@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+aiofiles
+groq
+python-dotenv
+pytest
