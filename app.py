@@ -7,16 +7,17 @@ Menggabungkan static file serving + REST API:
   GET  /api/rules          → Metadata semua 15 rules
   GET  /                   → Sajikan index.html (frontend)
 
-Cara menjalankan (dari folder project):
-  pip install -r requirements.txt
-  set GROQ_API_KEY=gsk_...            (Windows, opsional — tanpa ini fallback dipakai)
-  uvicorn app:app --port 8000
+Cara menjalankan (pilih salah satu):
+  1. Klik dua kali run.bat            ← termudah, otomatis install & buka browser
+  2. .\run.ps1                         ← dari PowerShell
+  3. Manual:
+       pip install -r requirements.txt
+       python app.py                   ← atau: uvicorn app:app --port 8080
 
-  Catatan: JANGAN pakai --reload untuk penggunaan normal. --reload membuat
-  server RESTART setiap ada file yang berubah (mis. editor auto-save), sehingga
-  sesi bisa terputus di tengah jalan. Pakai --reload hanya saat mengembangkan kode.
+  Catatan: JANGAN pakai --reload. --reload membuat server RESTART setiap ada
+  file yang berubah, sehingga sesi bisa terputus di tengah jalan.
 
-Buka browser: http://localhost:8000
+Buka browser: http://localhost:8080
 
 Author : Kelompok AI Code Review Tutor
 Course : Kecerdasan Buatan, Semester Genap 2025/2026
@@ -364,10 +365,8 @@ def analyze(request: AnalyzeRequest):
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
 
 
-# ============================================================
-# Entry point — agar `python app.py` langsung menyalakan server
-# ============================================================
 if __name__ == "__main__":
     import uvicorn
-    # Tanpa --reload agar sesi tidak terputus saat ada file berubah.
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Port 8080 konsisten dengan run.bat / run.ps1.
+    # Tanpa --reload agar sesi tidak terputus saat file berubah.
+    uvicorn.run(app, host="127.0.0.1", port=8080)
