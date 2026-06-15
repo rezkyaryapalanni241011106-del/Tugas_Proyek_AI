@@ -86,12 +86,16 @@ class R03_MissingDocstring(PerNodeRule):
     rule_id = "R03_missing_docstring"
     rule_name = "Fungsi tanpa docstring"
     severity = Severity.LOW
+    MIN_BODY = 5  # Fungsi pendek (<5 statement) tidak diwajibkan punya docstring
 
     def condition(self, node, ctx):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return False
         if not node.body:
             return True
+        # Fungsi pendek tidak perlu docstring — menambah noise tanpa nilai edukasi
+        if len(node.body) < self.MIN_BODY:
+            return False
         first = node.body[0]
         return not (
             isinstance(first, ast.Expr)
@@ -116,9 +120,11 @@ class R04_MagicNumber(PerNodeRule):
         if node.value in self.ALLOWED:
             return False
         parent = getattr(node, "_parent", None)
-        if isinstance(parent, ast.Call) and isinstance(parent.func, ast.Name):
-            if parent.func.id == "range":
-                return False
+        # Angka yang menjadi argumen langsung sebuah fungsi bukan "magic number"
+        # dalam arti sesungguhnya — itu hanya data yang diteruskan, bukan konstanta
+        # logika yang tertanam tanpa nama. Cukup kecualikan semua ast.Call.
+        if isinstance(parent, ast.Call):
+            return False
         if isinstance(parent, ast.Expr):
             return False
         return True
@@ -128,11 +134,28 @@ class R05_DeepNesting(PerNodeRule):
     rule_id = "R05_deep_nesting"
     rule_name = "Nesting terlalu dalam (>4 tingkat)"
     severity = Severity.HIGH
+    _NEST = (ast.If, ast.For, ast.While, ast.Try, ast.With,
+             ast.AsyncFor, ast.AsyncWith)
 
     def condition(self, node, ctx):
         if not isinstance(node, (ast.If, ast.For, ast.While, ast.Try, ast.With)):
             return False
-        return nesting_depth(node) > 4
+        if nesting_depth(node) <= 4:
+            return False
+        # Laporkan HANYA node terdangkal yang pertama menembus batas. Tanpa ini,
+        # satu struktur bersarang dalam (mis. if di dalam if di dalam if...) akan
+        # menghasilkan banyak violation berulang untuk masalah yang sama.
+        parent = getattr(node, "_parent", None)
+        while parent is not None:
+            if isinstance(parent, self._NEST):
+                # Ada leluhur kontrol yang juga sudah menembus batas → biarkan
+                # leluhur itu yang dilaporkan, node ini cukup diabaikan.
+                return nesting_depth(parent) <= 4
+            if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                   ast.ClassDef)):
+                break
+            parent = getattr(parent, "_parent", None)
+        return True
 
 
 class R06_LongFunction(PerNodeRule):
@@ -185,7 +208,34 @@ class R09_PrintDebug(PerNodeRule):
             return False
         if node.func.id != "print":
             return False
-        return is_inside_function(node)
+        if not is_inside_function(node):
+            return False
+        # Hanya flag jika fungsi induknya juga punya return value.
+        # Fungsi tanpa return yang berisi print() kemungkinan besar memang
+        # fungsi output (tampilkan/cetak), bukan fungsi dengan sisa debug.
+        parent_func = self._get_parent_func(node)
+        return parent_func is not None and self._has_value_return(parent_func)
+
+    @staticmethod
+    def _get_parent_func(node):
+        current = getattr(node, "_parent", None)
+        while current is not None:
+            if isinstance(current, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                return current
+            current = getattr(current, "_parent", None)
+        return None
+
+    @staticmethod
+    def _has_value_return(func_node):
+        """True jika ada Return dengan nilai (bukan bare return) di fungsi ini."""
+        for child in ast.walk(func_node):
+            if child is func_node:
+                continue
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if isinstance(child, ast.Return) and child.value is not None:
+                return True
+        return False
 
 
 class R10_NoReturn(PerNodeRule):
@@ -198,6 +248,7 @@ class R10_NoReturn(PerNodeRule):
             return False
         has_return = False
         has_computation = False
+        has_print = False
         for child in ast.walk(node):
             if child is node:
                 continue
@@ -207,6 +258,15 @@ class R10_NoReturn(PerNodeRule):
                 has_return = True
             if isinstance(child, (ast.Assign, ast.AugAssign, ast.For, ast.While)):
                 has_computation = True
+            if (isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Name)
+                    and child.func.id == "print"):
+                has_print = True
+        # Jika fungsi mengeluarkan hasil via print(), besar kemungkinan
+        # ia memang fungsi output yang tidak butuh return value.
+        # Hanya flag R10 jika tidak ada print() sama sekali.
+        if has_print:
+            return False
         return has_computation and not has_return
 
 

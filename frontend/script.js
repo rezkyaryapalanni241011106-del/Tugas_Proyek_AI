@@ -21,7 +21,8 @@ const LS_SIDEBAR  = 'crt_sidebar_v1';    // 'open' | 'closed'
 let sessions = [];      // [{ id, title, createdAt, updatedAt, rounds:[{code, violations, summary}] }]
 let activeId = null;    // id sesi aktif
 let analysisRound = 0;  // penghitung bubble di tampilan saat ini
-let allViolations = {}; // round -> violations[] (dipakai tombol Salin)
+let allViolations = {}; // round -> violations[] (dipakai garis penanda baris)
+let allGroups = {};     // round -> groups[] (violation digabung per rule_id, utk tombol Salin)
 
 /* ================================================================
    PERSISTENCE (localStorage)
@@ -153,6 +154,7 @@ function showWelcome() {
   $('bottomBar').classList.remove('show');
   analysisRound = 0;
   allViolations = {};
+  allGroups = {};
 }
 
 function showAnalysisView() {
@@ -264,6 +266,7 @@ function skeletonHtml(count) {
 function restoreSession(s) {
   analysisRound = 0;
   allViolations = {};
+  allGroups = {};
   showAnalysisView();
   $('bottomBar').classList.add('show');
 
@@ -422,6 +425,7 @@ async function startAnalysis() {
 
   analysisRound = 0;
   allViolations = {};
+  allGroups = {};
   $('chatWrap').innerHTML = '';
   showAnalysisView();
   renderHistory();
@@ -570,17 +574,22 @@ function buildThinkingBubble(round) {
    AI RESPONSE CONTENT
    ================================================================ */
 function buildAiResponse(violations, round, llmUsed) {
-  const total     = violations.length;
-
-  if (total === 0) {
+  if (!violations.length) {
     return `<p class="msg-intro">&#10003; Mantap! Saya tidak menemukan antipattern pada kode ini. Kode kamu sudah cukup rapi.</p>`;
   }
 
-  const critCount = violations.filter(v => v.severity === 'CRITICAL').length;
+  // Gabungkan violation per rule_id: satu jenis masalah = satu kartu.
+  // Penjelasan & perbaikan untuk rule yang sama memang identik, jadi cukup
+  // ditampilkan sekali, sementara semua baris yang terkena didaftar bersama.
+  const groups = groupViolations(violations);
+  allGroups[round] = groups;
 
-  let intro = `Saya menemukan <strong>${total} masalah</strong> pada kode kamu`;
-  if (critCount > 0) {
-    intro += `, termasuk <strong>${critCount} masalah kritis</strong> yang perlu segera diperbaiki`;
+  const issueCount = groups.length;
+  const critGroups = groups.filter(g => g.severity === 'CRITICAL').length;
+
+  let intro = `Saya menemukan <strong>${issueCount} jenis masalah</strong> pada kode kamu`;
+  if (critGroups > 0) {
+    intro += `, termasuk <strong>${critGroups} yang kritis</strong> dan sebaiknya diperbaiki lebih dulu`;
   }
   intro += '.';
 
@@ -589,21 +598,44 @@ function buildAiResponse(violations, round, llmUsed) {
     ? `<div class="offline-note">&#8505; LLM tidak terhubung — berikut penjelasan <strong>umum &amp; universal</strong> untuk setiap masalah beserta contoh perbaikan.</div>`
     : '';
 
-  const filterBar = buildFilterBar(violations, round);
-  const items = violations.map((v, i) => violationHtml(v, round, i)).join('');
+  const filterBar = buildFilterBar(groups, round);
+  const items = groups.map((g, gi) => violationGroupHtml(g, round, gi)).join('');
 
   return `${note}<p class="msg-intro">${intro}</p>${filterBar}<div class="vi-list" id="viList-${round}">${items}</div>`;
 }
 
+/* Kelompokkan violation berdasarkan rule_id, pertahankan urutan kemunculan
+   (yang sudah terurut berdasarkan severity dari backend). */
+function groupViolations(violations) {
+  const map = new Map();
+  violations.forEach(v => {
+    let g = map.get(v.rule_id);
+    if (!g) {
+      g = {
+        rule_id:     v.rule_id,
+        rule_name:   v.rule_name,
+        severity:    v.severity,
+        explanation: v.explanation,
+        fixed_code:  v.fixed_code,
+        source:      v.source,
+        locations:   [],
+      };
+      map.set(v.rule_id, g);
+    }
+    g.locations.push({ line_no: v.line_no, snippet: v.snippet });
+  });
+  return [...map.values()];
+}
+
 /* Bar filter severity per jawaban — agar user bisa fokus (mis. CRITICAL saja)
    tanpa scroll jauh. Chip hanya muncul untuk severity yang memang ada. */
-function buildFilterBar(violations, round) {
+function buildFilterBar(groups, round) {
   const ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
   const counts = {};
-  violations.forEach(v => { counts[v.severity] = (counts[v.severity] || 0) + 1; });
+  groups.forEach(g => { counts[g.severity] = (counts[g.severity] || 0) + 1; });
 
-  const total = violations.length;
-  if (total <= 1) return '';   // tak perlu filter untuk 1 masalah
+  const total = groups.length;
+  if (total <= 1) return '';   // tak perlu filter untuk 1 jenis masalah
 
   const chips = [`
     <button type="button" class="flt-chip active" data-round="${round}" data-sev="ALL"
@@ -635,39 +667,57 @@ function filterRound(round, sev, btn) {
   if (btn) btn.classList.add('active');
 }
 
-function violationHtml(v, round, i) {
-  const explainSection = `<p class="vi-explain">${v.explanation}</p>`;
+/* Render satu KARTU per jenis masalah (rule_id), dengan semua lokasi digabung.
+   Penjelasan & perbaikan tampil sekali; tiap baris yang terkena didaftar di
+   bawahnya secara ringkas. */
+function violationGroupHtml(g, round, gi) {
+  const locs  = g.locations;
+  const count = locs.length;
 
-  // Kode bermasalah (snippet asli dari kode user) — tampil langsung di kartu
-  // agar tidak perlu scroll ke atas untuk melihat baris yang dimaksud.
-  const badSection = v.snippet ? `
+  const explainSection = `<p class="vi-explain">${g.explanation}</p>`;
+
+  // Label lokasi di header: ringkas jika banyak.
+  const lineList = locs.map(l => l.line_no).join(', ');
+  const locLabel = count > 1
+    ? `${count} lokasi (baris ${lineList})`
+    : `Baris ${locs[0].line_no}`;
+
+  // Tampilkan snippet tiap lokasi, tapi batasi agar kartu tidak kepanjangan.
+  const MAX_SNIPPET = 4;
+  const shown = locs.slice(0, MAX_SNIPPET);
+  const badSection = shown.map(l => l.snippet ? `
   <div class="vi-block vi-block-bad">
     <div class="vi-block-head">
-      <span class="vi-block-label"><span class="vi-x">&#10007;</span> Kode kamu — Baris ${v.line_no}</span>
+      <span class="vi-block-label"><span class="vi-x">&#10007;</span> Kode kamu — Baris ${l.line_no}</span>
     </div>
-    <pre class="vi-pre vi-pre-bad">${esc(v.snippet)}</pre>
-  </div>` : '';
+    <pre class="vi-pre vi-pre-bad">${esc(l.snippet)}</pre>
+  </div>` : '').join('');
 
-  // Perbaikan (bertumpuk di bawah kode bermasalah)
-  const fixSection = v.fixed_code ? `
+  const moreNote = count > MAX_SNIPPET
+    ? `<p class="vi-more">…dan ${count - MAX_SNIPPET} baris lain dengan masalah serupa: baris ${locs.slice(MAX_SNIPPET).map(l => l.line_no).join(', ')}.</p>`
+    : '';
+
+  // Perbaikan (tampil sekali untuk seluruh jenis masalah)
+  const fixSection = g.fixed_code ? `
   <div class="vi-block vi-block-fix">
     <div class="vi-block-head">
       <span class="vi-block-label"><span class="vi-check">&#10003;</span> Perbaikan</span>
-      <button type="button" class="copy-btn" onclick="copyCode(${round},${i})" aria-label="Salin kode perbaikan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Salin</button>
+      <button type="button" class="copy-btn" onclick="copyCode(${round},${gi})" aria-label="Salin kode perbaikan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Salin</button>
     </div>
-    <pre class="vi-pre vi-pre-fix">${esc(v.fixed_code)}</pre>
+    <pre class="vi-pre vi-pre-fix">${esc(g.fixed_code)}</pre>
   </div>` : '';
 
   // Badge sumber penjelasan: dari LLM ("AI") atau jawaban umum ("Umum")
-  const badge = v.source === 'ai'
+  const badge = g.source === 'ai'
     ? `<span class="src-badge src-ai" title="Penjelasan dari LLM">AI</span>`
     : `<span class="src-badge src-fallback" title="Penjelasan umum (tanpa LLM)">Umum</span>`;
 
   return `
-<div class="vi-item" data-sev="${v.severity}" style="animation-delay:${i * 90}ms">
-  <p class="vi-header-line"><span class="sev-inline sev-${v.severity}">[${v.severity}]</span> <strong class="vi-title">${esc(v.rule_name)}</strong> ${badge} <span class="vi-meta">— Baris ${v.line_no} · ${v.rule_id}</span></p>
+<div class="vi-item" data-sev="${g.severity}" style="animation-delay:${gi * 90}ms">
+  <p class="vi-header-line"><span class="sev-inline sev-${g.severity}">[${g.severity}]</span> <strong class="vi-title">${esc(g.rule_name)}</strong> ${badge} <span class="vi-meta">— ${locLabel} · ${g.rule_id}</span></p>
   ${explainSection}
   ${badSection}
+  ${moreNote}
   ${fixSection}
 </div>`;
 }
@@ -675,8 +725,8 @@ function violationHtml(v, round, i) {
 /* ================================================================
    COPY
    ================================================================ */
-function copyCode(round, i) {
-  navigator.clipboard.writeText(allViolations[round]?.[i]?.fixed_code || '').catch(() => {});
+function copyCode(round, gi) {
+  navigator.clipboard.writeText(allGroups[round]?.[gi]?.fixed_code || '').catch(() => {});
 }
 
 /* ================================================================

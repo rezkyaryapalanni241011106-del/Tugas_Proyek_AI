@@ -23,19 +23,25 @@ def meracik_prompt_batch(v_star_list: list) -> str:
     """Susun satu prompt yang memuat SEMUA violations sekaligus."""
     violations_str = json.dumps(v_star_list, ensure_ascii=False, indent=2)
     return f"""
-Kamu adalah asisten dosen pemrograman dasar yang ramah.
-Berikut adalah daftar antipattern yang ditemukan dalam kode mahasiswa (format JSON):
+Kamu adalah asisten dosen pemrograman dasar yang suportif dan proporsional.
+Berikut adalah daftar kebiasaan kode yang perlu diperbaiki, ditemukan dalam kode mahasiswa tingkat DASAR (format JSON):
 
 {violations_str}
 
-Berikan feedback edukatif dalam Bahasa Indonesia untuk SETIAP antipattern di atas.
+KONTEKS PENTING sebelum memberi feedback:
+- Ini adalah kode mahasiswa yang BARU belajar Python (semester 1-2)
+- Tujuanmu adalah MENDIDIK, bukan menghakimi. Nada harus memotivasi, bukan membuat mahasiswa patah semangat
+- Sesuaikan bobot penjelasan dengan severity: CRITICAL/HIGH butuh penjelasan serius, MEDIUM/LOW cukup singkat dan ringan
+- Jangan dramatis untuk masalah kecil (LOW/MEDIUM) — mahasiswa perlu tahu ini saran perbaikan, bukan bencana
+
+Berikan feedback edukatif dalam Bahasa Indonesia untuk SETIAP item di atas.
 
 PENTING: Kembalikan HANYA JSON array yang valid dengan tepat {len(v_star_list)} objek.
 Urutan objek harus sama dengan urutan input. Gunakan persis struktur berikut:
 [
   {{
     "rule_id": "salin rule_id dari input",
-    "penjelasan": "penjelasan singkat mengapa kebiasaan ini buruk",
+    "penjelasan": "penjelasan singkat mengapa kebiasaan ini perlu diperbaiki (proporsional dengan severity)",
     "kode_perbaikan": "contoh kode Python yang sudah diperbaiki",
     "latihan": "satu soal latihan singkat"
   }}

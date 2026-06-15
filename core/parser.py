@@ -107,7 +107,13 @@ def find_strings_in_compare_or_assign(tree: ast.AST) -> Dict[str, int]:
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
             continue
-        parent = getattr(node, "_parent", None)
+        # Dict literal keys ({"key": val}) dan subscript keys (d["key"]) bukan
+        # "hardcoded string" yang perlu dijadikan konstanta — keduanya adalah
+        # bagian dari pola akses dict yang wajar, bukan nilai logika yang tertanam.
+        immediate_parent = getattr(node, "_parent", None)
+        if isinstance(immediate_parent, (ast.Dict, ast.Subscript)):
+            continue
+        parent = immediate_parent
         while parent is not None:
             if isinstance(parent, (ast.Compare, ast.Assign)):
                 counts[node.value] = counts.get(node.value, 0) + 1

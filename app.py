@@ -24,7 +24,7 @@ Course : Kecerdasan Buatan, Semester Genap 2025/2026
 
 import sys
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -39,6 +39,22 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 app = FastAPI(title="AI Code Review Tutor", version="1.0.0", docs_url="/docs")
+
+
+@app.middleware("http")
+async def no_cache_static(request: Request, call_next):
+    """Cegah browser meng-cache aset frontend (js/css/html).
+
+    Tanpa ini, browser sering menyajikan script.js versi lama dari cache
+    sehingga perubahan kode tidak terlihat walau sudah refresh biasa.
+    """
+    response = await call_next(request)
+    path = request.url.path
+    if path.endswith((".js", ".css", ".html")) or path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # ============================================================
 # Data contoh kode — dipindahkan dari script.js ke sini
@@ -346,3 +362,12 @@ def analyze(request: AnalyzeRequest):
 # Static file serving — HARUS di bawah semua route API
 # ============================================================
 app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
+
+
+# ============================================================
+# Entry point — agar `python app.py` langsung menyalakan server
+# ============================================================
+if __name__ == "__main__":
+    import uvicorn
+    # Tanpa --reload agar sesi tidak terputus saat ada file berubah.
+    uvicorn.run(app, host="127.0.0.1", port=8000)

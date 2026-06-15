@@ -160,21 +160,29 @@ class TestR03MissingDocstring:
     # ── True Positive ──────────────────────────────────────────────────────
 
     def test_positive_fungsi_hanya_return(self):
-        """Fungsi yang langsung return tanpa docstring → harus terdeteksi."""
+        """Fungsi dengan ≥5 statement tanpa docstring → harus terdeteksi."""
         code = """
 def hitung_luas(panjang, lebar):
-    return panjang * lebar
+    p = panjang
+    l = lebar
+    luas = p * l
+    keliling = 2 * (p + l)
+    return luas
 """
         assert len(_violations(code, self.RID)) >= 1
 
     def test_positive_fungsi_dengan_komentar_bukan_docstring(self):
-        """Komentar # bukan docstring, harus tetap terdeteksi."""
+        """Komentar # bukan docstring; fungsi ≥5 statement harus tetap terdeteksi."""
         code = """
 def cek_prima(n):
     # cek apakah n adalah bilangan prima
     if n < 2:
         return False
-    for i in range(2, n):
+    if n == 2:
+        return True
+    if n % 2 == 0:
+        return False
+    for i in range(3, n):
         if n % i == 0:
             return False
     return True
@@ -182,13 +190,21 @@ def cek_prima(n):
         assert len(_violations(code, self.RID)) >= 1
 
     def test_positive_beberapa_fungsi_tanpa_docstring(self):
-        """Dua fungsi tanpa docstring → keduanya harus terdeteksi."""
+        """Dua fungsi panjang (≥5 statement) tanpa docstring → keduanya harus terdeteksi."""
         code = """
-def tambah(a, b):
-    return a + b
+def hitung_total(harga, jumlah, diskon, pajak, ongkir):
+    subtotal = harga * jumlah
+    potongan = subtotal * diskon
+    kena_pajak = (subtotal - potongan) * pajak
+    total = subtotal - potongan + kena_pajak + ongkir
+    return total
 
-def kurang(a, b):
-    return a - b
+def hitung_rata(nilai1, nilai2, nilai3, nilai4, nilai5):
+    total = nilai1 + nilai2 + nilai3 + nilai4 + nilai5
+    jumlah = 5
+    rata = total / jumlah
+    selisih = max(nilai1, nilai2, nilai3) - rata
+    return rata
 """
         assert len(_violations(code, self.RID)) >= 2
 
