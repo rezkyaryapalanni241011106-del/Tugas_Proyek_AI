@@ -133,12 +133,14 @@ def main() -> int:
 
     if json_output:
         list_pelanggaran = [v.to_dict() for v in violations]
-        print(f"\nMemulai proses Gemini AI untuk {len(list_pelanggaran)} pelanggaran...",
+        print(f"\nMemulai proses LLM untuk {len(list_pelanggaran)} pelanggaran...",
               file=sys.stderr)
-        hasil_llm = generate_feedback(list_pelanggaran)
+        hasil_llm, llm_status, llm_provider = generate_feedback(list_pelanggaran)
         out = {
             "source_file": str(target),
             "summary": summary,
+            "llm_provider": llm_provider,
+            "llm_status": llm_status,
             "feedback_edukatif": hasil_llm,
         }
         print(json.dumps(out, indent=2, ensure_ascii=False))

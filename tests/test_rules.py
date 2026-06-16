@@ -579,6 +579,35 @@ def tampilkan_salam(nama):
 """
         assert len(_violations(code, self.RID)) == 0
 
+    def test_negative_init_constructor(self):
+        """__init__ yang mengeset atribut tidak boleh diflag (constructor wajar void)."""
+        code = """
+class Titik:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+"""
+        assert len(_violations(code, self.RID)) == 0
+
+    def test_negative_setter_atribut(self):
+        """Setter yang menulis ke self.attr adalah prosedur efek-samping → tidak diflag."""
+        code = """
+class Akun:
+    def set_saldo(self, nilai):
+        self.saldo = nilai
+"""
+        assert len(_violations(code, self.RID)) == 0
+
+    def test_negative_mutasi_in_place(self):
+        """Mutasi in-place (menulis ke data[i]) tidak butuh return → tidak diflag."""
+        code = """
+def tukar(data, i, j):
+    sementara = data[i]
+    data[i] = data[j]
+    data[j] = sementara
+"""
+        assert len(_violations(code, self.RID)) == 0
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # R11 — Hardcoded String
@@ -785,6 +814,30 @@ i = 0
 while i < 10:
     print(i)
     i += 1
+"""
+        assert len(_violations(code, self.RID)) == 0
+
+    def test_negative_while_true_dengan_return(self):
+        """while True yang keluar lewat return (mis. loop menu) → tidak infinite."""
+        code = """
+def menu():
+    while True:
+        pilihan = input("Pilih: ")
+        if pilihan == "keluar":
+            return
+        print(pilihan)
+"""
+        assert len(_violations(code, self.RID)) == 0
+
+    def test_negative_while_true_dengan_raise(self):
+        """while True yang keluar lewat raise → tidak dianggap infinite."""
+        code = """
+def tunggu(maks):
+    n = 0
+    while True:
+        n = n + 1
+        if n > maks:
+            raise TimeoutError("terlalu lama")
 """
         assert len(_violations(code, self.RID)) == 0
 

@@ -1,6 +1,14 @@
 fastapi
 uvicorn[standard]
 aiofiles
-groq
 python-dotenv
 pytest
+
+# ── Penyedia LLM (pilih salah satu lewat LLM_PROVIDER di .env) ──
+# Cukup pasang SDK untuk penyedia yang ingin kamu pakai. Aplikasi tetap
+# jalan walau sebagian belum terpasang; SDK baru dibutuhkan saat penyedia
+# itu benar-benar dipilih.
+groq                 # LLM_PROVIDER=groq      (gratis, default)
+openai               # LLM_PROVIDER=openai / deepseek
+google-genai         # LLM_PROVIDER=gemini
+anthropic            # LLM_PROVIDER=claude

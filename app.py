@@ -3,8 +3,9 @@ app.py — FastAPI Server untuk AI Code Review Tutor.
 
 Menggabungkan static file serving + REST API:
   GET  /api/samples/{key}  → Kembalikan kode contoh (basic/magic/deep/all)
-  POST /api/analyze        → Jalankan rule engine + Gemini, kembalikan violations
+  POST /api/analyze        → Jalankan rule engine + LLM, kembalikan violations
   GET  /api/rules          → Metadata semua 15 rules
+  GET  /api/llm            → Info penyedia LLM aktif (provider, model, status)
   GET  /                   → Sajikan index.html (frontend)
 
 Cara menjalankan (pilih salah satu):
@@ -32,6 +33,7 @@ from pydantic import BaseModel
 from core.inference_engine import InferenceEngine
 from core.knowledge_base import KnowledgeBase
 from core.llm_explainer import generate_feedback
+from core.llm_providers import resolve_provider
 
 # Paksa UTF-8 di terminal Windows
 if hasattr(sys.stdout, "reconfigure"):
@@ -154,7 +156,8 @@ def q(a, b, c, d, e, f, lst=[]):
 
 
 # ============================================================
-# Fallback konten per rule — ditampilkan jika Gemini tidak tersedia
+# Fallback konten per rule — ditampilkan jika LLM tidak tersedia
+# (API key kosong, rate limit, atau error penyedia)
 # ============================================================
 FALLBACK: dict[str, dict] = {
     "R01_bare_except": {
@@ -286,18 +289,37 @@ async def get_rules():
     return {"rules": kb.describe(), "total": len(kb)}
 
 
+@app.get("/api/llm")
+async def get_llm_info():
+    """Info penyedia LLM aktif — untuk verifikasi konfigurasi .env.
+
+    status: "ok" (siap dipakai) | "no_key" (key kosong) |
+            "unknown_provider" (LLM_PROVIDER salah ketik).
+    """
+    provider, status, label = resolve_provider()
+    return {
+        "provider": label,
+        "model": provider.model if provider else None,
+        "status": status,
+        "ready": provider is not None,
+    }
+
+
 @app.post("/api/analyze")
 def analyze(request: AnalyzeRequest):
     """
-    Endpoint utama: terima kode Python, jalankan inference engine + Gemini.
+    Endpoint utama: terima kode Python, jalankan inference engine + LLM.
 
-    Menggunakan def (bukan async def) agar time.sleep() di dalam
-    generate_feedback() berjalan di thread pool dan tidak memblokir event loop.
+    Menggunakan def (bukan async def) agar pemanggilan LLM yang bersifat
+    blocking berjalan di thread pool dan tidak memblokir event loop FastAPI.
 
     Returns:
         {
-          "violations": [...],  // list violation dengan explanation & fixed_code
-          "summary": {...}      // statistik by severity
+          "violations": [...],   // list violation dengan explanation & fixed_code
+          "summary": {...},      // statistik by severity
+          "llm_status": "...",   // ok | rate_limited | no_key | error
+          "llm_used": bool,      // True jika penjelasan berasal dari LLM
+          "llm_provider": "..."  // nama penyedia aktif (mis. "Groq")
         }
     """
     code = request.code.strip()
@@ -317,10 +339,16 @@ def analyze(request: AnalyzeRequest):
     summary = engine.summary(violations)
     v_dicts = [v.to_dict() for v in violations]
 
-    # STEP 2: Deduplikasi per rule_id sebelum kirim ke Gemini
-    # Rule yang sama (mis. R01 muncul 3x) cukup 1 panggilan — penjelasannya sama
-    unique_v_dicts = list({v["rule_id"]: v for v in v_dicts}.values())
-    feedbacks = generate_feedback(unique_v_dicts)
+    # STEP 2: Deduplikasi per rule_id sebelum kirim ke Groq
+    # Rule yang sama (mis. R01 muncul 3x) cukup 1 panggilan — penjelasannya sama.
+    # Urutkan CRITICAL→HIGH→MEDIUM→LOW agar bila ada cap di LLM explainer,
+    # yang diprioritaskan selalu violations paling parah.
+    _SEV_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    unique_v_dicts = sorted(
+        {v["rule_id"]: v for v in v_dicts}.values(),
+        key=lambda v: _SEV_ORDER.get(v.get("severity", "LOW"), 99),
+    )
+    feedbacks, llm_status, llm_provider = generate_feedback(unique_v_dicts)
 
     # Buat lookup: rule_id → hasil LLM
     # Catatan: jika rule_id muncul lebih dari sekali (mis. R03 untuk 2 fungsi),
@@ -354,8 +382,10 @@ def analyze(request: AnalyzeRequest):
     return {
         "violations": result_violations,
         "summary": summary,
-        # Beri tahu frontend apakah penjelasan berasal dari LLM atau fallback umum
+        # "ok" | "rate_limited" | "no_key" | "error"
+        "llm_status": llm_status,
         "llm_used": bool(feedback_map),
+        "llm_provider": llm_provider,
     }
 
 

@@ -98,7 +98,7 @@ function createSession(code) {
   return s;
 }
 
-function saveRound(code, violations, summary, llmUsed) {
+function saveRound(code, violations, summary, llmUsed, llmStatus, llmProvider) {
   const s = getActive();
   if (!s) return;
   s.rounds.push({
@@ -106,6 +106,8 @@ function saveRound(code, violations, summary, llmUsed) {
     violations: violations || [],
     summary: summary || null,
     llmUsed: llmUsed === undefined ? true : llmUsed,
+    llmStatus: llmStatus || (llmUsed ? 'ok' : 'no_key'),
+    llmProvider: llmProvider || '',
   });
   s.updatedAt = Date.now();
   // Jangan timpa judul yang sudah diedit manual
@@ -280,14 +282,14 @@ function restoreSession(s) {
   requestAnimationFrame(() => {
     wrap.innerHTML = '';
     analysisRound = 0;
-    rounds.forEach(r => renderRound(r.code, r.violations || [], r.llmUsed));
+    rounds.forEach(r => renderRound(r.code, r.violations || [], r.llmUsed, r.llmStatus, r.llmProvider));
     const scroll = $('chatScroll');
     if (scroll) scroll.scrollTop = scroll.scrollHeight;
   });
 }
 
 /* Render satu round LANGSUNG dari data tersimpan (tanpa fetch) */
-function renderRound(code, violations, llmUsed) {
+function renderRound(code, violations, llmUsed, llmStatus, llmProvider) {
   analysisRound++;
   const round = analysisRound;
   allViolations[round] = violations;
@@ -300,7 +302,7 @@ function renderRound(code, violations, llmUsed) {
   if (cv) cv.innerHTML = buildCodeLines(code, violations);
 
   const aiBody = $(`aiBubbleBody-${round}`);
-  if (aiBody) aiBody.innerHTML = buildAiResponse(violations, round, llmUsed);
+  if (aiBody) aiBody.innerHTML = buildAiResponse(violations, round, llmUsed, llmStatus, llmProvider);
 }
 
 /* ================================================================
@@ -475,9 +477,10 @@ async function runAnalysis(code) {
 
     const data = await res.json();
     finishAnalysis(data, round, code);
-    saveRound(code, data.violations || [], data.summary || null, data.llm_used);   // <- simpan riwayat
+    saveRound(code, data.violations || [], data.summary || null,
+              data.llm_used, data.llm_status, data.llm_provider);
   } catch (e) {
-    showAnalysisError(e.message, round);
+    showAnalysisError(e.message, round, code);
   }
 }
 
@@ -489,16 +492,48 @@ function finishAnalysis(data, round, code) {
   if (codeViewer) codeViewer.innerHTML = buildCodeLines(code, violations);
 
   const aiBody = $(`aiBubbleBody-${round}`);
-  if (aiBody) aiBody.innerHTML = buildAiResponse(violations, round, data.llm_used);
+  if (aiBody) aiBody.innerHTML = buildAiResponse(violations, round, data.llm_used, data.llm_status, data.llm_provider);
 
   $('bottomBar').classList.add('show');
 }
 
-function showAnalysisError(message, round) {
+function showAnalysisError(message, round, code) {
   const aiBody = $(`aiBubbleBody-${round}`);
-  if (aiBody) {
-    aiBody.innerHTML = `<p style="color:var(--red);font-size:14px;">&#9888; ${esc(message)}</p>`;
+  if (!aiBody) return;
+
+  const syntaxMatch = message.match(/Syntax error pada baris (\d+):\s*(.+)/i);
+  if (syntaxMatch) {
+    const lineNo  = parseInt(syntaxMatch[1], 10);
+    const detail  = syntaxMatch[2];
+
+    // Highlight baris bermasalah di code viewer
+    const cv = $(`codeViewer-${round}`);
+    if (cv && code) cv.innerHTML = buildCodeLines(code, [], lineNo);
+
+    aiBody.innerHTML = `
+<div class="syntax-err-card">
+  <div class="syntax-err-head">
+    <span>&#9888;</span>
+    <strong>Kode tidak dapat dianalisis &mdash; ada syntax error</strong>
+  </div>
+  <div class="syntax-err-body">
+    <p class="syntax-err-loc">Baris <strong>${lineNo}</strong>: <code>${esc(detail)}</code></p>
+    <p class="syntax-err-hint">Python tidak bisa membaca struktur kode ini sama sekali. Perbaiki syntax-nya dulu, lalu kirim ulang.</p>
+    <div class="syntax-err-tips">
+      <strong>Tips umum:</strong>
+      <ul>
+        <li>Setiap <code>if</code>, <code>elif</code>, <code>else</code>, <code>def</code>, <code>for</code>, <code>while</code> harus diakhiri tanda titik dua <code>:</code></li>
+        <li>Gunakan <code>&gt;=</code> bukan <code>&#8805;</code>, dan <code>&lt;=</code> bukan <code>&#8804;</code> (hindari copy-paste dari PDF/Word)</li>
+        <li>Indentasi harus konsisten &mdash; pakai spasi atau tab, jangan campur</li>
+        <li>Setiap tanda kurung buka <code>(</code> harus punya pasangan tutup <code>)</code></li>
+      </ul>
+    </div>
+  </div>
+</div>`;
+  } else {
+    aiBody.innerHTML = `<p class="analysis-generic-err">&#9888; ${esc(message)}</p>`;
   }
+
   $('bottomBar').classList.add('show');
 }
 
@@ -520,8 +555,9 @@ function buildUserBubble(code, round) {
 </div>`;
 }
 
-/* Render code lines with optional severity strips */
-function buildCodeLines(code, violations) {
+/* Render code lines with optional severity strips.
+   errorLine (optional): nomor baris syntax error — ditandai merah. */
+function buildCodeLines(code, violations, errorLine) {
   const SEV_PRIORITY = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1 };
 
   const lineMap = {};
@@ -537,9 +573,10 @@ function buildCodeLines(code, violations) {
 
   return lines.map((line, idx) => {
     const lineNo    = idx + 1;
+    const isErr     = lineNo === errorLine;
     const sev       = lineMap[lineNo];
-    const lineClass = sev ? 'cv-line has-issue' : 'cv-line';
-    const stripClass = sev ? `cv-strip-${sev}` : '';
+    const lineClass = isErr ? 'cv-line cv-line-error' : (sev ? 'cv-line has-issue' : 'cv-line');
+    const stripClass = isErr ? 'cv-strip-error' : (sev ? `cv-strip-${sev}` : '');
     return `<div class="${lineClass}">
       <span class="cv-ln">${lineNo}</span>
       <span class="cv-strip ${stripClass}"></span>
@@ -573,10 +610,13 @@ function buildThinkingBubble(round) {
 /* ================================================================
    AI RESPONSE CONTENT
    ================================================================ */
-function buildAiResponse(violations, round, llmUsed) {
+function buildAiResponse(violations, round, llmUsed, llmStatus, llmProvider) {
   if (!violations.length) {
     return `<p class="msg-intro">&#10003; Mantap! Saya tidak menemukan antipattern pada kode ini. Kode kamu sudah cukup rapi.</p>`;
   }
+
+  // Nama penyedia LLM aktif (mis. "Groq"); fallback bila tak dikirim backend.
+  const prov = esc(llmProvider || 'LLM');
 
   // Gabungkan violation per rule_id: satu jenis masalah = satu kartu.
   // Penjelasan & perbaikan untuk rule yang sama memang identik, jadi cukup
@@ -593,15 +633,26 @@ function buildAiResponse(violations, round, llmUsed) {
   }
   intro += '.';
 
-  // Penanda: tampil hanya bila LLM TIDAK terhubung (jawaban umum & universal)
-  const note = (llmUsed === false)
-    ? `<div class="offline-note">&#8505; LLM tidak terhubung — berikut penjelasan <strong>umum &amp; universal</strong> untuk setiap masalah beserta contoh perbaikan.</div>`
+  // Penanda: tampil hanya bila LLM TIDAK digunakan, dengan pesan sesuai penyebab.
+  // Pesan menyebut nama penyedia aktif agar jelas yang mana yang perlu disetel.
+  const NOTE_MSGS = {
+    'no_key':      `&#8505; Penjelasan umum &mdash; isi API key <strong>${prov}</strong> di <code>.env</code> untuk versi personal.`,
+    'rate_limited': `&#9201; Kuota <strong>${prov}</strong> habis &mdash; penjelasan umum. Coba lagi &plusmn;1 menit.`,
+    'error':        `&#8505; <strong>${prov}</strong> tidak terhubung &mdash; penjelasan umum.`,
+  };
+  const noteMsg = llmUsed ? '' : (NOTE_MSGS[llmStatus] || NOTE_MSGS['error']);
+  const note = noteMsg ? `<div class="offline-note">${noteMsg}</div>` : '';
+
+  // Kredit penyedia: tampil saat penjelasan benar-benar berasal dari LLM.
+  // Berguna untuk membandingkan kualitas antar penyedia (Groq/OpenAI/Gemini/...).
+  const credit = (llmUsed && llmProvider)
+    ? `<p class="llm-credit">&#10024; Penjelasan dipersonalisasi oleh <strong>${prov}</strong></p>`
     : '';
 
   const filterBar = buildFilterBar(groups, round);
   const items = groups.map((g, gi) => violationGroupHtml(g, round, gi)).join('');
 
-  return `${note}<p class="msg-intro">${intro}</p>${filterBar}<div class="vi-list" id="viList-${round}">${items}</div>`;
+  return `${note}<p class="msg-intro">${intro}</p>${credit}${filterBar}<div class="vi-list" id="viList-${round}">${items}</div>`;
 }
 
 /* Kelompokkan violation berdasarkan rule_id, pertahankan urutan kemunculan

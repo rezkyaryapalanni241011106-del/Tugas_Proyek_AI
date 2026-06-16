@@ -1,6 +1,6 @@
 # AI Code Review Tutor
 
-Sistem AI untuk mendeteksi antipattern pada kode Python mahasiswa pemrograman dasar, menggunakan **Rule-Based Reasoning (Forward Chaining)** sebagai inti deteksi dan **Google Gemini** sebagai penjelas umpan balik edukatif.
+Sistem AI untuk mendeteksi antipattern pada kode Python mahasiswa pemrograman dasar, menggunakan **Rule-Based Reasoning (Forward Chaining)** sebagai inti deteksi dan **LLM (multi-provider: Groq / OpenAI / Gemini / Claude / DeepSeek)** sebagai penjelas umpan balik edukatif. Penyedia LLM dapat diganti hanya dengan mengubah `LLM_PROVIDER` di file `.env`.
 
 > Proyek ini dikembangkan sebagai tugas mata kuliah Kecerdasan Buatan, Semester Genap 2025/2026  
 > Institut Teknologi Bacharuddin Jusuf Habibie
@@ -14,7 +14,7 @@ Sistem AI untuk mendeteksi antipattern pada kode Python mahasiswa pemrograman da
 3. [Prasyarat](#prasyarat)
 4. [Cara Instalasi](#cara-instalasi)
 5. [Cara Menjalankan](#cara-menjalankan)
-6. [Setup API Key Gemini](#setup-api-key-gemini)
+6. [Setup API Key & Pilih Penyedia LLM](#setup-api-key--pilih-penyedia-llm)
 7. [15 Rules Antipattern](#15-rules-antipattern)
 8. [Struktur Proyek](#struktur-proyek)
 9. [Menjalankan Unit Test](#menjalankan-unit-test)
@@ -38,7 +38,7 @@ Kode Python Mahasiswa
 [2] Inference Engine   ← forward chaining terhadap 15 rules
         │
         ▼
-[3] LLM Explainer      ← Google Gemini (hanya penjelas, BUKAN detektor)
+[3] LLM Explainer      ← Groq/OpenAI/Gemini/Claude/DeepSeek (hanya penjelas, BUKAN detektor)
         │
         ▼
 Panel Umpan Balik Edukatif
@@ -68,7 +68,8 @@ State sistem direpresentasikan sebagai **S = (C, T, V, F)**:
 | AST Parser | `core/parser.py` | `ast` (built-in Python) |
 | Knowledge Base (15 rules) | `core/knowledge_base.py` | Python murni |
 | Inference Engine | `core/inference_engine.py` | Forward chaining |
-| LLM Explainer | `core/llm_explainer.py` | Google Gemini API |
+| Abstraksi Multi-Provider LLM | `core/llm_providers.py` | Groq / OpenAI / Gemini / Claude / DeepSeek |
+| LLM Explainer | `core/llm_explainer.py` | Prompt + parsing (provider-agnostic) |
 | Web Interface | `frontend/` | HTML / CSS / JavaScript |
 | REST API Server | `app.py` | FastAPI + Uvicorn |
 | CLI | `main.py` | Python standard library |
@@ -79,7 +80,8 @@ State sistem direpresentasikan sebagai **S = (C, T, V, F)**:
 
 - **Python 3.8 atau lebih baru**
 - **pip** (manajer paket Python)
-- Koneksi internet (untuk fitur penjelasan LLM via Gemini — opsional)
+- Koneksi internet (untuk fitur penjelasan LLM — opsional)
+- API key salah satu penyedia LLM (Groq gratis & disarankan — opsional)
 
 ---
 
@@ -128,7 +130,7 @@ Copy-Item .env.example .env
 cp .env.example .env
 ```
 
-Kemudian isi API key Gemini di file `.env` (lihat [Setup API Key Gemini](#setup-api-key-gemini)).
+Kemudian pilih penyedia LLM dan isi API key-nya di file `.env` (lihat [Setup API Key & Pilih Penyedia LLM](#setup-api-key--pilih-penyedia-llm)).
 
 ---
 
@@ -167,7 +169,7 @@ Analisis file Python secara langsung dari terminal:
 # Analisis file tertentu
 python main.py path/ke/kode.py
 
-# Analisis dengan output JSON (termasuk penjelasan Gemini)
+# Analisis dengan output JSON (termasuk penjelasan LLM)
 python main.py path/ke/kode.py --json
 
 # Tampilkan log rule firings (untuk debugging/demo)
@@ -195,24 +197,52 @@ Total: 3 violations  (HIGH: 1, MEDIUM: 2)
 
 ---
 
-## Setup API Key Gemini
+## Setup API Key & Pilih Penyedia LLM
 
-Fitur penjelasan LLM memerlukan API key Google Gemini. Rule engine tetap berjalan **tanpa API key** — hasilnya hanya berupa daftar violation tanpa penjelasan edukatif.
+Sistem mendukung **5 penyedia LLM**. Pilih salah satu lewat `LLM_PROVIDER` di `.env`, lalu isi API key penyedia tersebut. Rule engine tetap berjalan **tanpa API key** — hasilnya berupa daftar violation dengan **penjelasan umum** (fallback) untuk setiap rule.
 
-### Cara Mendapatkan API Key
+### Penyedia yang Didukung
 
-1. Buka [Google AI Studio](https://aistudio.google.com/)
-2. Login dengan akun Google
-3. Klik **"Get API Key"** → **"Create API key"**
-4. Salin API key yang dihasilkan
+| `LLM_PROVIDER` | Penyedia | Model default | Env API key | Catatan |
+|---|---|---|---|---|
+| `groq` | Groq | `llama-3.3-70b-versatile` | `GROQ_API_KEY` | **Gratis**, disarankan |
+| `openai` | OpenAI (ChatGPT) | `gpt-4o-mini` | `OPENAI_API_KEY` | Berbayar |
+| `gemini` | Google Gemini | `gemini-2.0-flash` | `GEMINI_API_KEY` | Ada tier gratis |
+| `claude` | Anthropic (Claude) | `claude-3-5-haiku-latest` | `ANTHROPIC_API_KEY` | Berbayar |
+| `deepseek` | DeepSeek | `deepseek-chat` | `DEEPSEEK_API_KEY` | Berbayar, murah |
+
+> Model default tiap penyedia bisa ditimpa lewat `LLM_MODEL` di `.env`.
 
 ### Cara Mengaktifkan
 
-Buka file `.env` di folder root proyek dan isi:
+1. Pasang SDK penyedia yang dipakai (sudah termasuk di `requirements.txt`):
+   - Groq → `pip install groq`
+   - OpenAI / DeepSeek → `pip install openai`
+   - Gemini → `pip install google-genai`
+   - Claude → `pip install anthropic`
+2. Buka `.env`, pilih penyedia dan isi key-nya. Contoh memakai Groq:
 
-```env
-GEMINI_API_KEY=AIza...kunci-anda-di-sini
-```
+   ```env
+   LLM_PROVIDER=groq
+   GROQ_API_KEY=gsk_...kunci-anda-di-sini
+   ```
+
+   Ingin mencoba penyedia lain? Cukup ganti `LLM_PROVIDER` dan isi key-nya, lalu **restart server**:
+
+   ```env
+   LLM_PROVIDER=gemini
+   GEMINI_API_KEY=AIza...
+   ```
+
+3. Verifikasi penyedia aktif lewat endpoint diagnostik: `GET http://localhost:8080/api/llm`.
+
+### Cara Mendapatkan API Key
+
+- **Groq** (gratis): [console.groq.com](https://console.groq.com) → API Keys → Create API Key
+- **OpenAI**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+- **Gemini**: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+- **Claude**: [console.anthropic.com](https://console.anthropic.com/settings/keys)
+- **DeepSeek**: [platform.deepseek.com](https://platform.deepseek.com/api_keys)
 
 > **Catatan Keamanan:** Jangan pernah commit file `.env` ke repository publik.
 
@@ -292,7 +322,8 @@ ai-code-review-tutor/
 │   ├── parser.py               # AST parser dan utilitas traversal
 │   ├── knowledge_base.py       # 15 rules antipattern (R01–R15)
 │   ├── inference_engine.py     # Forward chaining inference engine
-│   └── llm_explainer.py        # Google Gemini integration
+│   ├── llm_providers.py        # Abstraksi multi-provider LLM (Groq/OpenAI/Gemini/Claude/DeepSeek)
+│   └── llm_explainer.py        # Prompt + parsing feedback (provider-agnostic)
 │
 ├── frontend/                   # Web Interface
 │   ├── index.html              # Single-page application
@@ -385,7 +416,7 @@ Institut Teknologi Bacharuddin Jusuf Habibie
 |---|---|---|
 | 241011106 | Rezky Arya Palanni *(Ketua)* | AST Parser + Knowledge Base (15 rules) |
 | 241011128 | Andi Ahmad Naufal Madani | Inference Engine (forward chaining) |
-| 241011110 | Habel Mangopo | LLM Integration (Gemini API) |
+| 241011110 | Habel Mangopo | LLM Integration (multi-provider: Groq/OpenAI/Gemini/Claude/DeepSeek) |
 | 241011123 | Muhammad Arkan Naim | User Interface (HTML/CSS/JS) |
 | 241011124 | Muhammad Akmal Ahsan | Testing, Evaluasi, dan Dokumentasi |
 

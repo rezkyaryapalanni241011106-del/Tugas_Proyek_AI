@@ -559,8 +559,11 @@ main {
 .cv-strip-HIGH     { background: var(--orange); }
 .cv-strip-MEDIUM   { background: var(--amber); }
 .cv-strip-LOW      { background: var(--blue); }
+.cv-strip-error    { background: var(--red); }
 
 .cv-line.has-issue .cv-ln { color: var(--ink2); }
+.cv-line.cv-line-error { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.cv-line.cv-line-error .cv-ln { color: var(--red); font-weight: 700; }
 
 .cv-text {
   padding: 2px 16px;
@@ -804,6 +807,82 @@ main {
   margin-bottom: 18px;
 }
 .offline-note strong { color: var(--amber); }
+
+/* Kredit penyedia LLM (tampil saat penjelasan berasal dari LLM) */
+.llm-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--ink3);
+  background: var(--blue-soft);
+  border: 1px solid var(--blue);
+  border-radius: 999px;
+  padding: 4px 12px;
+  margin: -8px 0 20px;
+}
+.llm-credit strong { color: var(--blue); font-weight: 600; }
+
+/* ─── Kartu Syntax Error ─── */
+.syntax-err-card {
+  border: 1.5px solid var(--red);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.syntax-err-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 14px;
+}
+.syntax-err-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.syntax-err-loc {
+  font-size: 13.5px;
+  margin: 0;
+}
+.syntax-err-loc code {
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12.5px;
+}
+.syntax-err-hint {
+  font-size: 13px;
+  color: var(--ink3);
+  margin: 0;
+}
+.syntax-err-tips {
+  background: var(--surface1);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.syntax-err-tips ul {
+  margin: 6px 0 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.syntax-err-tips code {
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.analysis-generic-err {
+  color: var(--red);
+  font-size: 14px;
+}
 
 /* ─── Skeleton loading (saat membuka riwayat besar) ─── */
 .chat-skeleton {

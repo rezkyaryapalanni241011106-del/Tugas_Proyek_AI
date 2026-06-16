@@ -90,6 +90,36 @@ def has_break(loop_node: ast.AST) -> bool:
     return _walk(loop_node)
 
 
+def _has_return_or_raise(node: ast.AST) -> bool:
+    """True jika ada `return`/`raise` di dalam node (di luar fungsi/kelas nested).
+
+    Berbeda dari break: return & raise menghentikan SELURUH fungsi, sehingga
+    otomatis keluar dari loop mana pun — termasuk loop terluar.
+    """
+    def _walk(n: ast.AST, is_root: bool) -> bool:
+        if not is_root and isinstance(
+            n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            return False
+        if isinstance(n, (ast.Return, ast.Raise)):
+            return True
+        for child in ast.iter_child_nodes(n):
+            if _walk(child, False):
+                return True
+        return False
+    return _walk(node, True)
+
+
+def has_exit(loop_node: ast.AST) -> bool:
+    """True jika loop punya jalan keluar yang jelas.
+
+    Yaitu: `break` (di scope loop ini), atau `return`/`raise` di mana pun di
+    dalam badan loop. Dipakai R14 agar `while True` yang keluar lewat return
+    (mis. loop menu / retry-sampai-berhasil) tidak salah dianggap infinite.
+    """
+    return has_break(loop_node) or _has_return_or_raise(loop_node)
+
+
 def is_constant_true(node: ast.AST) -> bool:
     """Cek apakah node merepresentasikan konstanta True (untuk R14)."""
     if isinstance(node, ast.Constant):

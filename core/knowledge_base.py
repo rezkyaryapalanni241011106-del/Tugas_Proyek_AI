@@ -14,7 +14,7 @@ from typing import List, Set
 from .models import Severity, Violation
 from .parser import (
     AnalysisContext, get_snippet, nesting_depth,
-    is_inside_function, has_break, is_constant_true,
+    is_inside_function, has_exit, is_constant_true,
 )
 
 
@@ -246,9 +246,16 @@ class R10_NoReturn(PerNodeRule):
     def condition(self, node, ctx):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             return False
+        # Dunder method (mis. __init__, __enter__, __setitem__) memang TIDAK
+        # diharapkan mengembalikan nilai komputasi — jangan pernah diflag.
+        if node.name.startswith("__") and node.name.endswith("__"):
+            return False
+
         has_return = False
-        has_computation = False
         has_print = False
+        assigns_local = False    # menulis hasil ke variabel lokal (ast.Name)
+        mutates_state = False    # menulis ke atribut/subscript (efek samping)
+
         for child in ast.walk(node):
             if child is node:
                 continue
@@ -256,18 +263,54 @@ class R10_NoReturn(PerNodeRule):
                 continue
             if isinstance(child, ast.Return):
                 has_return = True
-            if isinstance(child, (ast.Assign, ast.AugAssign, ast.For, ast.While)):
-                has_computation = True
-            if (isinstance(child, ast.Call)
+            elif isinstance(child, ast.Assign):
+                for tgt in child.targets:
+                    kind = self._target_kind(tgt)
+                    assigns_local = assigns_local or kind == "local"
+                    mutates_state = mutates_state or kind == "state"
+            elif isinstance(child, ast.AugAssign):
+                kind = self._target_kind(child.target)
+                assigns_local = assigns_local or kind == "local"
+                mutates_state = mutates_state or kind == "state"
+            elif (isinstance(child, ast.Call)
                     and isinstance(child.func, ast.Name)
                     and child.func.id == "print"):
                 has_print = True
-        # Jika fungsi mengeluarkan hasil via print(), besar kemungkinan
-        # ia memang fungsi output yang tidak butuh return value.
-        # Hanya flag R10 jika tidak ada print() sama sekali.
-        if has_print:
+
+        # Fungsi yang mengeluarkan hasil via print() besar kemungkinan memang
+        # fungsi output; yang punya return jelas tidak melanggar.
+        if has_return or has_print:
             return False
-        return has_computation and not has_return
+        # Fungsi yang sengaja memodifikasi STATE eksternal (atribut objek,
+        # elemen list/dict) adalah prosedur efek-samping — wajar tanpa return
+        # (mis. constructor, setter, algoritma in-place). Jangan diflag.
+        if mutates_state:
+            return False
+        # Hanya flag bila ada hasil komputasi yang ditulis ke variabel LOKAL
+        # tetapi tidak pernah dikembalikan — inti dari antipattern ini.
+        return assigns_local
+
+    @staticmethod
+    def _target_kind(target: ast.AST) -> str:
+        """Klasifikasi target assignment.
+
+        Returns 'local' (variabel biasa / ast.Name), 'state' (atribut atau
+        elemen subscript → efek samping), atau '' (lainnya). Menangani
+        unpacking tuple/list dan starred target.
+        """
+        if isinstance(target, ast.Name):
+            return "local"
+        if isinstance(target, (ast.Attribute, ast.Subscript)):
+            return "state"
+        if isinstance(target, (ast.Tuple, ast.List)):
+            kinds = {R10_NoReturn._target_kind(el) for el in target.elts}
+            if "state" in kinds:
+                return "state"
+            if "local" in kinds:
+                return "local"
+        if isinstance(target, ast.Starred):
+            return R10_NoReturn._target_kind(target.value)
+        return ""
 
 
 class R11_HardcodedString(PerNodeRule):
@@ -334,7 +377,8 @@ class R14_InfiniteLoopRisk(PerNodeRule):
             return False
         if not is_constant_true(node.test):
             return False
-        return not has_break(node)
+        # Aman bila ada break, ATAU return/raise (keduanya keluar dari loop).
+        return not has_exit(node)
 
 
 # ============================================================
