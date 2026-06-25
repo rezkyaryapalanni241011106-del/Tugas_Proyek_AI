@@ -161,64 +161,64 @@ def q(a, b, c, d, e, f, lst=[]):
 # ============================================================
 FALLBACK: dict[str, dict] = {
     "R01_bare_except": {
-        "explanation": "<code>except:</code> tanpa tipe menangkap SEMUA error termasuk <code>KeyboardInterrupt</code> dan <code>SystemExit</code>, sehingga program tidak bisa dihentikan dengan Ctrl+C dan bug ikut tertelan.",
-        "fixed_code": "# Tangkap tipe error yang spesifik, jangan except polos\nexcept ValueError as e:\n    print(f\"Error: {e}\")",
+        "explanation": "<code>except:</code> tanpa tipe error menangkap semua exception — termasuk <code>KeyboardInterrupt</code> yang mencegah program dihentikan dengan Ctrl+C.",
+        "fixed_code": "except ValueError:\n    ...",
     },
     "R02_non_descriptive_name": {
-        "explanation": "Nama variabel satu huruf tidak menjelaskan tujuannya. Nama yang baik membuat kode bisa dibaca seperti kalimat tanpa komentar tambahan.",
-        "fixed_code": "# Beri nama yang menjelaskan isinya\ntotal_harga = harga * jumlah   # bukan: x = h * j",
+        "explanation": "Nama variabel satu huruf tidak mendeskripsikan isi atau tujuannya.",
+        "fixed_code": "total_nilai = nilai1 + nilai2",
     },
     "R03_missing_docstring": {
-        "explanation": "Fungsi tanpa docstring sulit dipahami orang lain. Docstring satu baris di awal fungsi sudah cukup menjelaskan tujuannya.",
-        "fixed_code": "def nama_fungsi(...):\n    \"\"\"Jelaskan tujuan fungsi dalam satu kalimat.\"\"\"\n    ...",
+        "explanation": "Fungsi ini memiliki &ge;5 statement tetapi tidak memiliki docstring (string keterangan tujuan) di baris pertama.",
+        "fixed_code": "def nama_fungsi(...):\n    \"\"\"Jelaskan tujuan fungsi.\"\"\"\n    ...",
     },
     "R04_magic_number": {
-        "explanation": "Angka literal tanpa nama membingungkan pembaca — tidak jelas apa maksud angka tersebut. Beri nama lewat konstanta agar maksudnya terbaca.",
-        "fixed_code": "# Beri nama pada angka agar maksudnya jelas\nBATAS = <angka>          # ganti <angka> dengan nilai aslimu\nif nilai > BATAS:\n    ...",
+        "explanation": "Angka literal tanpa nama tidak jelas maknanya dalam kode — definisikan sebagai konstanta bernama.",
+        "fixed_code": "NILAI_MAKSIMAL = 100",
     },
     "R05_deep_nesting": {
-        "explanation": "Nesting yang terlalu dalam membuat alur sulit diikuti. Pakai <em>early return</em> untuk menangani kasus khusus lebih dulu, lalu lanjutkan logika utama tanpa menjorok dalam.",
-        "fixed_code": "# Early return memangkas nesting\nif not syarat:\n    return\n# logika utama tetap di level dangkal\n...",
+        "explanation": "Nesting lebih dari 4 tingkat membuat alur kode sulit dibaca dan di-debug.",
+        "fixed_code": "if not syarat:\n    return\n...",
     },
     "R06_long_function": {
-        "explanation": "Fungsi yang terlalu panjang sulit di-review dan diuji. Pecah menjadi beberapa fungsi kecil yang masing-masing melakukan satu tugas.",
-        "fixed_code": "# Pecah jadi fungsi kecil bertugas tunggal\ndef fungsi_utama(data):\n    hasil = proses(data)\n    return hasil",
+        "explanation": "Fungsi dengan lebih dari 20 statement sebaiknya dipecah menjadi beberapa fungsi yang lebih kecil.",
+        "fixed_code": "def proses_utama():\n    return langkah_kecil(...)",
     },
     "R07_too_many_params": {
-        "explanation": "Terlalu banyak parameter menyulitkan pemanggilan dan rawan salah urutan argumen. Kelompokkan parameter terkait ke dalam satu objek.",
-        "fixed_code": "# Kelompokkan parameter ke satu objek\ndef fungsi(data):       # data memuat field yang diperlukan\n    ...",
+        "explanation": "Fungsi dengan lebih dari 5 parameter rawan salah urutan argumen saat dipanggil.",
+        "fixed_code": "def fungsi(data):  # data berisi semua field\n    ...",
     },
     "R08_mutable_default": {
-        "explanation": "List/dict/set sebagai default argument dipakai bersama oleh SEMUA pemanggilan, sehingga nilai lama ikut terbawa — bug klasik Python. Gunakan <code>None</code> lalu buat objek baru di dalam fungsi.",
-        "fixed_code": "# Pakai None, buat objek baru di dalam fungsi\ndef fungsi(data=None):\n    if data is None:\n        data = []",
+        "explanation": "Default argument bertipe list/dict/set dipakai bersama semua pemanggilan fungsi — ini menyebabkan nilai lama ikut terbawa.",
+        "fixed_code": "def fungsi(data=None):\n    if data is None:\n        data = []",
     },
     "R09_print_debug": {
-        "explanation": "<code>print()</code> di dalam fungsi biasanya sisa debugging. Gunakan modul <code>logging</code> yang bisa dimatikan tanpa mengubah kode.",
-        "fixed_code": "# Ganti print debug dengan logging\nimport logging\nlogging.debug(f\"nilai: {data}\")",
+        "explanation": "<code>print()</code> di dalam fungsi yang me-return nilai kemungkinan adalah sisa proses debugging.",
+        "fixed_code": "logging.debug(f\"nilai: {data}\")",
     },
     "R10_no_return": {
-        "explanation": "Fungsi yang menghitung sesuatu tapi tidak <code>return</code> memaksa pemanggil bergantung pada variabel global/efek samping. Kembalikan hasilnya.",
-        "fixed_code": "# Kembalikan hasil lewat return\ndef hitung(...):\n    ...\n    return hasil",
+        "explanation": "Fungsi ini menghitung hasil ke variabel lokal tetapi tidak mengembalikannya dengan <code>return</code>.",
+        "fixed_code": "def hitung(...):\n    hasil = ...\n    return hasil",
     },
     "R11_hardcoded_string": {
-        "explanation": "String yang sama muncul berulang. Bila perlu diganti, harus diubah di banyak tempat dan rawan terlewat. Simpan sekali sebagai konstanta.",
-        "fixed_code": "# Simpan string berulang sebagai konstanta\nSTATUS_LULUS = \"lulus\"\nif status == STATUS_LULUS:\n    ...",
+        "explanation": "String yang sama muncul lebih dari sekali — simpan sebagai konstanta agar tidak perlu diganti di banyak tempat.",
+        "fixed_code": "STATUS = \"lulus\"\nif nilai == STATUS:\n    ...",
     },
     "R12_global_variable": {
-        "explanation": "Variabel global membuat fungsi bergantung pada state di luar dirinya, menyulitkan testing dan pelacakan bug. Oper nilai lewat parameter dan kembalikan hasilnya.",
-        "fixed_code": "# Hindari global: oper lewat parameter, kembalikan hasil\ndef tambah(total, nilai):\n    return total + nilai\ntotal = tambah(total, nilai)",
+        "explanation": "Kata kunci <code>global</code> membuat fungsi bergantung pada state di luar scope-nya sendiri.",
+        "fixed_code": "def tambah(total, nilai):\n    return total + nilai",
     },
     "R13_empty_except": {
-        "explanation": "<code>except: pass</code> menelan error secara diam-diam sehingga bug tersembunyi tidak ketahuan. Minimal catat errornya sebelum melanjutkan.",
-        "fixed_code": "# Jangan telan error; catat dulu\nexcept Exception as e:\n    logging.error(e)",
+        "explanation": "<code>except: pass</code> menelan error secara diam-diam — bug bisa tersembunyi tanpa diketahui.",
+        "fixed_code": "except Exception as e:\n    logging.error(e)",
     },
     "R14_infinite_loop_risk": {
-        "explanation": "<code>while True</code> tanpa jalan keluar yang jelas berisiko menggantung program selamanya. Pastikan ada kondisi berhenti atau <code>break</code>.",
-        "fixed_code": "# Beri kondisi keluar yang jelas\nwhile not selesai:\n    ...\n    selesai = cek_kondisi()",
+        "explanation": "<code>while True</code> tanpa <code>break</code>, <code>return</code>, atau <code>raise</code> yang jelas berisiko menggantung program.",
+        "fixed_code": "while True:\n    if kondisi:\n        break",
     },
     "R15_code_duplication": {
-        "explanation": "Dua fungsi yang isinya hampir sama berarti perbaikan bug harus dilakukan di dua tempat dan satu sering terlewat. Satukan menjadi satu fungsi bersama.",
-        "fixed_code": "# Satukan kode kembar jadi satu fungsi\ndef proses(...):\n    ...      # logika bersama dipakai keduanya",
+        "explanation": "Dua fungsi ini memiliki isi yang sangat mirip (>80% sama) — satukan menjadi satu fungsi bersama.",
+        "fixed_code": "def proses(...):\n    ...  # satu fungsi untuk keduanya",
     },
 }
 
@@ -227,20 +227,13 @@ FALLBACK: dict[str, dict] = {
 # Jawaban UMUM & UNIVERSAL — dipakai bila rule tidak ada di FALLBACK
 # (mis. rule baru ditambahkan) DAN LLM tidak terhubung.
 # ============================================================
-_DEFAULT_FIXED_CODE = (
-    "# Terapkan prinsip clean code pada baris yang ditandai:\n"
-    "# nama jelas · satu tugas per fungsi · tangani error · hindari pengulangan"
-)
+_DEFAULT_FIXED_CODE = "# Tinjau baris yang ditandai dan sesuaikan dengan prinsip clean code."
 
 
 def _default_explanation(v: dict) -> str:
-    """Penjelasan umum & universal untuk antipattern apa pun tanpa LLM."""
+    """Penjelasan singkat untuk antipattern yang tidak ada entri FALLBACK-nya."""
     return (
-        f"Terdeteksi antipattern <code>{v['rule_name']}</code> pada baris {v['line_no']}. "
-        "Pola seperti ini umumnya membuat kode lebih sulit dibaca, diuji, atau "
-        "rawan menimbulkan bug tersembunyi. Tinjau kembali baris tersebut lalu "
-        "sederhanakan mengikuti prinsip clean code (nama jelas, satu tugas per "
-        "fungsi, tangani error secara eksplisit, dan hindari pengulangan)."
+        f"Terdeteksi <strong>{v['rule_name']}</strong> pada baris {v['line_no']}."
     )
 
 
@@ -348,7 +341,7 @@ def analyze(request: AnalyzeRequest):
         {v["rule_id"]: v for v in v_dicts}.values(),
         key=lambda v: _SEV_ORDER.get(v.get("severity", "LOW"), 99),
     )
-    feedbacks, llm_status, llm_provider = generate_feedback(unique_v_dicts)
+    feedbacks, llm_status, llm_provider = generate_feedback(unique_v_dicts, source_code=code)
 
     # Buat lookup: rule_id → hasil LLM
     # Catatan: jika rule_id muncul lebih dari sekali (mis. R03 untuk 2 fungsi),

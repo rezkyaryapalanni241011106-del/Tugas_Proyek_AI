@@ -22,6 +22,7 @@ Course : Kecerdasan Buatan, Semester Genap 2025/2026
 Penanggung jawab modul ini: Habel Mangopo
 """
 
+import hashlib
 import json
 import os
 import re
@@ -62,17 +63,33 @@ _SYSTEM_PROMPT = (
 )
 
 
-def meracik_prompt_batch(v_star_list: list) -> str:
-    """Susun satu prompt yang memuat seluruh violation sekaligus."""
+def meracik_prompt_batch(v_star_list: list, source_code: str = "") -> str:
+    """Susun satu prompt yang memuat seluruh violation sekaligus.
+
+    Bila source_code diberikan, disertakan sebagai konteks kode aktual
+    sehingga LLM dapat memberi penjelasan yang spesifik, bukan generik.
+    """
     violations_str = json.dumps(v_star_list, ensure_ascii=False, indent=2)
-    return f"""
-Berikut daftar kebiasaan kode yang perlu diperbaiki, ditemukan dalam kode
-mahasiswa tingkat DASAR (format JSON):
+
+    kode_section = ""
+    if source_code and source_code.strip():
+        kode_section = f"""
+Berikut kode Python yang sedang dianalisis:
+
+```python
+{source_code.strip()}
+```
+
+"""
+
+    return f"""{kode_section}Sistem deteksi otomatis menemukan kebiasaan kode berikut pada kode di atas (format JSON):
 
 {violations_str}
 
 KONTEKS PENTING sebelum memberi feedback:
 - Ini kode mahasiswa yang BARU belajar Python (semester 1-2).
+- Penjelasanmu HARUS mengacu pada kode aktual di atas, bukan contoh generik.
+  Sebutkan nama fungsi, variabel, atau baris yang relevan dari kode aslinya.
 - Tujuanmu MENDIDIK, bukan menghakimi. Nada memotivasi, jangan bikin patah semangat.
 - Sesuaikan bobot penjelasan dengan severity: CRITICAL/HIGH butuh penjelasan
   serius; MEDIUM/LOW cukup singkat dan ringan.
@@ -89,8 +106,8 @@ PENTING soal format keluaran:
   "feedback": [
     {{
       "rule_id": "salin rule_id dari input",
-      "penjelasan": "penjelasan singkat mengapa kebiasaan ini perlu diperbaiki (proporsional dengan severity)",
-      "kode_perbaikan": "contoh kode Python yang sudah diperbaiki",
+      "penjelasan": "penjelasan SPESIFIK mengacu kode aktual — sebutkan nama fungsi/variabel aslinya",
+      "kode_perbaikan": "contoh perbaikan berdasarkan kode asli di atas (bukan template kosong)",
       "latihan": "satu soal latihan singkat"
     }}
   ]
@@ -171,9 +188,9 @@ def _normalize(items: list) -> list:
     return out
 
 
-def _call_provider(provider: LLMProvider, batch: list) -> list:
+def _call_provider(provider: LLMProvider, batch: list, source_code: str = "") -> list:
     """Satu panggilan ke penyedia aktif; kembalikan list hasil ternormalisasi."""
-    raw = provider.chat_json(_SYSTEM_PROMPT, meracik_prompt_batch(batch))
+    raw = provider.chat_json(_SYSTEM_PROMPT, meracik_prompt_batch(batch, source_code))
     return _normalize(_extract_items(raw))
 
 
@@ -181,12 +198,15 @@ def _call_provider(provider: LLMProvider, batch: list) -> list:
 # API publik
 # ============================================================
 
-def generate_feedback(v_star_list: list):
+def generate_feedback(v_star_list: list, source_code: str = ""):
     """Hasilkan feedback edukatif untuk violations via penyedia LLM aktif.
 
     Args:
-        v_star_list: list dict violation (hasil Violation.to_dict()), idealnya
-                     sudah dideduplikasi per rule_id oleh pemanggil.
+        v_star_list:  list dict violation (hasil Violation.to_dict()), idealnya
+                      sudah dideduplikasi per rule_id oleh pemanggil.
+        source_code:  kode Python asli yang dianalisis. Bila diberikan, LLM
+                      dapat memberi penjelasan yang mengacu nama fungsi/variabel
+                      aktual dari kode, bukan contoh generik.
 
     Returns:
         Tuple (results, status, provider_label):
@@ -212,12 +232,20 @@ def generate_feedback(v_star_list: list):
 
     pname = provider.name
 
-    # Pisahkan: sudah di-cache vs perlu panggil LLM
+    # Cache key menyertakan hash kode bila source_code diberikan, sehingga
+    # kode yang sama + rule yang sama → cache hit (hemat API call),
+    # tetapi kode yang berbeda → LLM dipanggil ulang (penjelasan spesifik).
+    code_hash = (
+        hashlib.md5(source_code.encode(), usedforsecurity=False).hexdigest()[:8]
+        if source_code and source_code.strip()
+        else ""
+    )
+
     cached_results = []
     need_llm = []
     for v in v_star_list:
         rid = v.get("rule_id", "")
-        ckey = f"{pname}:{rid}"
+        ckey = f"{pname}:{rid}:{code_hash}"
         if ckey in _rule_cache:
             cached_results.append({"rule_id": rid, "hasil_llm": _rule_cache[ckey]})
         else:
@@ -233,16 +261,17 @@ def generate_feedback(v_star_list: list):
         return cached_results, "ok", label
 
     batch = need_llm[:MAX_RULES_PER_CALL]
-    print(f"  ✦ [{label}] mengirim {len(batch)} rule ke {provider.model} ...",
+    print(f"  ✦ [{label}] mengirim {len(batch)} rule ke {provider.model} "
+          f"({'dengan' if source_code else 'tanpa'} konteks kode) ...",
           file=sys.stderr)
 
     try:
-        new_results = _call_provider(provider, batch)
+        new_results = _call_provider(provider, batch, source_code)
 
         for r in new_results:
             rid = r.get("rule_id", "")
             if rid:
-                _rule_cache[f"{pname}:{rid}"] = r["hasil_llm"]
+                _rule_cache[f"{pname}:{rid}:{code_hash}"] = r["hasil_llm"]
 
         print(f"  ✦ [{label}] selesai: {len(new_results)} hasil baru "
               f"(cache total {len(_rule_cache)}).", file=sys.stderr)

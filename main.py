@@ -135,7 +135,7 @@ def main() -> int:
         list_pelanggaran = [v.to_dict() for v in violations]
         print(f"\nMemulai proses LLM untuk {len(list_pelanggaran)} pelanggaran...",
               file=sys.stderr)
-        hasil_llm, llm_status, llm_provider = generate_feedback(list_pelanggaran)
+        hasil_llm, llm_status, llm_provider = generate_feedback(list_pelanggaran, source_code=source)
         out = {
             "source_file": str(target),
             "summary": summary,

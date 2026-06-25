@@ -636,9 +636,9 @@ function buildAiResponse(violations, round, llmUsed, llmStatus, llmProvider) {
   // Penanda: tampil hanya bila LLM TIDAK digunakan, dengan pesan sesuai penyebab.
   // Pesan menyebut nama penyedia aktif agar jelas yang mana yang perlu disetel.
   const NOTE_MSGS = {
-    'no_key':      `&#8505; Penjelasan umum &mdash; isi API key <strong>${prov}</strong> di <code>.env</code> untuk versi personal.`,
-    'rate_limited': `&#9201; Kuota <strong>${prov}</strong> habis &mdash; penjelasan umum. Coba lagi &plusmn;1 menit.`,
-    'error':        `&#8505; <strong>${prov}</strong> tidak terhubung &mdash; penjelasan umum.`,
+    'no_key':      `&#8505; <strong>Tanpa LLM</strong> &mdash; penjelasan di bawah bersifat umum berdasarkan pola kode saja, bukan berdasarkan konteks atau maksud kode kamu. Error runtime / logika (variabel tidak terdefinisi, nilai salah, dsb.) <em>tidak terdeteksi</em> oleh sistem ini. Isi API key <strong>${prov}</strong> di <code>.env</code> untuk analisis yang lebih relevan.`,
+    'rate_limited': `&#9201; Kuota <strong>${prov}</strong> habis &mdash; menampilkan penjelasan pola kode umum. Coba lagi &plusmn;1 menit.`,
+    'error':        `&#8505; <strong>Tanpa LLM</strong> &mdash; <strong>${prov}</strong> tidak terhubung. Menampilkan deteksi pola kode saja; error runtime/logika tidak tercakup.`,
   };
   const noteMsg = llmUsed ? '' : (NOTE_MSGS[llmStatus] || NOTE_MSGS['error']);
   const note = noteMsg ? `<div class="offline-note">${noteMsg}</div>` : '';
